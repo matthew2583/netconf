@@ -103,6 +103,25 @@ def get_xml_from_clixon(device_name):
         return None
 
 
+# Получаем текущее описание устройства из контроллера (включая обязательные поля)
+def get_device_xml_from_controller(device_name):
+    try:
+        cmd_show = f'{CLIXON_CLI} -1 show configuration devices device {device_name}'
+        result = subprocess.run(
+            cmd_show,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            stdin=subprocess.DEVNULL
+        )
+        if result.returncode != 0:
+            return None
+        return result.stdout
+    except Exception:
+        return None
+
+
 # Преобразуем XML в JSON используя SaxonC и внешний XSLT файл
 def transform_xml_to_json_saxon(xml_string):
     print("Преобразование XML -> JSON...")
@@ -201,7 +220,7 @@ def extract_namespaces(device_name):
         return {}
 
 
-# Конвертирует значение Python в строку для XML.
+# Конвертирует значение Python в строку для XML
 def _xml_val(val):
     if isinstance(val, bool):
         return "true" if val else "false"
@@ -254,21 +273,15 @@ def json_to_xml_python(json_data, device_name=None):
 
 # Собирает полный XML для загрузки в контроллер.
 def build_full_xml(xml_string, device_name):
-    storage_xml_file = os.path.join(STORAGE_DIR, f"{device_name}.xml")
-
-    if os.path.exists(storage_xml_file):
-        with open(storage_xml_file, "r") as f:
-            raw = f.read()
-        clean = re.sub(r'<!--.*?-->', '', raw, flags=re.DOTALL).strip()
-
+    device_xml = get_device_xml_from_controller(device_name)
+    if device_xml:
+        clean = re.sub(r'<!--.*?-->', '', device_xml, flags=re.DOTALL).strip()
         try:
-            # Регистрируем неймспейсы для корректной сериализации ET
-            ET.register_namespace("", "urn:ietf:params:xml:ns:netconf:base:1.0")
+            if not clean.startswith("<config"):
+                clean = f'<config>\n{clean}\n</config>'
+
             ET.register_namespace("ctrl", "http://clicon.org/controller")
             ET.register_namespace("rc", "http://clicon.org/restconf")
-
-            if not clean.startswith("<config"):
-                clean = f'<config xmlns="urn:ietf:params:xml:ns:netconf:base:1.0">\n{clean}\n</config>'
 
             root = ET.fromstring(clean)
             ns = {"c": "http://clicon.org/controller"}
@@ -280,34 +293,120 @@ def build_full_xml(xml_string, device_name):
                     if old_config is not None:
                         dev.remove(old_config)
                     new_config_el = ET.fromstring(
-                        f'<config xmlns="http://clicon.org/controller">{xml_string}</config>'
+                        '<config xmlns="http://clicon.org/controller" '
+                        'xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" '
+                        f'nc:operation="replace">{xml_string}</config>'
                     )
                     dev.append(new_config_el)
                     break
 
             wrapped_xml = ET.tostring(root, encoding="unicode")
-            if "urn:ietf:params:xml:ns:netconf:base:1.0" not in wrapped_xml:
-                wrapped_xml = wrapped_xml.replace(
-                    "<config",
-                    '<config xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"',
-                    1
-                )
             return wrapped_xml
-
         except Exception as e:
-            print(f"Предупреждение: не удалось разобрать сохранённый XML ({e}), строим минимальную обёртку")
+            print(f"Предупреждение: не удалось разобрать XML из контроллера ({e}), строим минимальную обёртку")
 
-    return f'''<config xmlns="urn:ietf:params:xml:ns:netconf:base:1.0">
+    return f'''<config>
     <devices xmlns="http://clicon.org/controller">
         <device>
                 <name>{device_name}</name>
-                <config>{xml_string}</config>
+                <config xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="replace">{xml_string}</config>
             </device>
         </devices>
     </config>'''
 
 
-# Загружает конфигурацию на устройство через clixon.
+# Делает commit/push только для указанного устройства через RESTCONF RPC
+def controller_commit_device(device_name, source_ds="candidate"):
+    rpc = f'''<?xml version="1.0" encoding="UTF-8"?>
+<rpc xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="1">
+  <controller-commit xmlns="http://clicon.org/controller">
+    <device>{device_name}</device>
+    <push>COMMIT</push>
+    <actions>NONE</actions>
+    <source>ds:{source_ds}</source>
+  </controller-commit>
+</rpc>]]>]]>\n'''
+
+    cmd = "clixon_netconf -q0 -f /usr/local/etc/clixon/controller.xml"
+
+    try:
+        res = subprocess.run(
+            cmd,
+            shell=True,
+            input=rpc,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+    except subprocess.TimeoutExpired:
+        print("Ошибка: таймаут NETCONF commit")
+        return False
+
+    output = (res.stdout or "") + (res.stderr or "")
+    if res.returncode != 0:
+        print(f"[netconf commit] returncode={res.returncode}")
+        if output.strip():
+            print(f"[netconf commit] output: {output.strip()}")
+        return False
+
+    if "rpc-error" in output.lower() or "error" in output.lower():
+        print(f"[netconf commit] output: {output.strip()}")
+        return False
+
+    return True
+
+
+# Применяет конфигурацию напрямую в running datastore через NETCONF edit-config
+def controller_edit_config_candidate(wrapped_xml):
+    try:
+        root = ET.fromstring(wrapped_xml)
+        inner_xml = "".join(
+            ET.tostring(child, encoding="unicode") for child in list(root)
+        )
+    except Exception as e:
+        print(f"Ошибка подготовки edit-config: {e}")
+        return False
+
+    rpc = f'''<?xml version="1.0" encoding="UTF-8"?>
+<rpc xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="1">
+    <edit-config>
+        <target><candidate/></target>
+    <config>
+{inner_xml}
+    </config>
+  </edit-config>
+</rpc>]]>]]>\n'''
+
+    cmd = "clixon_netconf -q0 -f /usr/local/etc/clixon/controller.xml"
+
+    try:
+        res = subprocess.run(
+            cmd,
+            shell=True,
+            input=rpc,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+    except subprocess.TimeoutExpired:
+        print("Ошибка: таймаут NETCONF edit-config")
+        return False
+
+    output = (res.stdout or "") + (res.stderr or "")
+    if res.returncode != 0:
+        print(f"[netconf edit-config] returncode={res.returncode}")
+        if output.strip():
+            print(f"[netconf edit-config] output: {output.strip()}")
+        return False
+
+    if "rpc-error" in output.lower() or "error" in output.lower():
+        print(f"[netconf edit-config] output: {output.strip()}")
+        return False
+
+    return True
+
+
+# Загружает конфигурацию на устройство через clixon
 def apply_xml_to_clixon(xml_string, device_name):
     print(f"Применение конфигурации на {device_name}...")
 
@@ -318,30 +417,14 @@ def apply_xml_to_clixon(xml_string, device_name):
         print(wrapped_xml[:600])
         print("---------------------------------")
 
-        xml_tmp = f"/tmp/xml_config_{device_name}.xml"
-        with open(xml_tmp, "w") as f:
-            f.write(wrapped_xml)
-
-        cmd_load = f"{CLIXON_CLI} -m configure -1 load replace xml"
-        with open(xml_tmp, "r") as xml_f:
-            res_load = subprocess.run(
-                cmd_load,
-                shell=True,
-                stdin=xml_f,
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-
-        load_output = res_load.stdout + res_load.stderr
-        print(f"[load] returncode={res_load.returncode}")
-        if load_output.strip():
-            print(f"[load] output: {load_output.strip()}")
-
-        if res_load.returncode != 0:
-            print("Ошибка: load replace xml завершился с ошибкой")
+        # Merge keeps mandatory device metadata already present in the controller
+        if not controller_edit_config_candidate(wrapped_xml):
+            print("Ошибка: edit-config завершился с ошибкой")
             return False
-        
+
+        for dev in DEVICES:
+            open_connection(dev)
+
         cmd_commit = f"{CLIXON_CLI} -m configure -1 commit push"
         res_commit = subprocess.run(
             cmd_commit,
@@ -365,6 +448,11 @@ def apply_xml_to_clixon(xml_string, device_name):
         if has_error:
             print("Ошибка применения конфигурации")
             return False
+
+        storage_xml_file = os.path.join(STORAGE_DIR, f"{device_name}.xml")
+        with open(storage_xml_file, "w") as f:
+            f.write(wrapped_xml)
+        print(f"XML-кэш обновлён в: {storage_xml_file}")
 
         print(f"Конфигурация успешно применена на {device_name}")
         return True
