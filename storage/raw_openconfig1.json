@@ -1,0 +1,102 @@
+{
+  "devices": {
+    "xmlns": {
+      "$": "http://clicon.org/controller",
+      "xml": "http://www.w3.org/XML/1998/namespace"
+    },
+    "device": {
+      "xmlns": {
+        "$": "http://clicon.org/controller",
+        "xml": "http://www.w3.org/XML/1998/namespace"
+      },
+      "name": {
+        "xmlns": {
+          "$": "http://clicon.org/controller",
+          "xml": "http://www.w3.org/XML/1998/namespace"
+        },
+        "$": "openconfig1"
+      },
+      "config": {
+        "xmlns": {
+          "$": "http://clicon.org/controller",
+          "xml": "http://www.w3.org/XML/1998/namespace"
+        },
+        "restconf": {
+          "xmlns": {
+            "$": "http://clicon.org/restconf",
+            "xml": "http://www.w3.org/XML/1998/namespace"
+          },
+          "enable": {
+            "xmlns": {
+              "$": "http://clicon.org/restconf",
+              "xml": "http://www.w3.org/XML/1998/namespace"
+            },
+            "$": true
+          },
+          "auth-type": {
+            "xmlns": {
+              "$": "http://clicon.org/restconf",
+              "xml": "http://www.w3.org/XML/1998/namespace"
+            },
+            "$": "none"
+          },
+          "debug": {
+            "xmlns": {
+              "$": "http://clicon.org/restconf",
+              "xml": "http://www.w3.org/XML/1998/namespace"
+            },
+            "$": 0
+          },
+          "log-destination": {
+            "xmlns": {
+              "$": "http://clicon.org/restconf",
+              "xml": "http://www.w3.org/XML/1998/namespace"
+            },
+            "$": "file"
+          },
+          "pretty": {
+            "xmlns": {
+              "$": "http://clicon.org/restconf",
+              "xml": "http://www.w3.org/XML/1998/namespace"
+            },
+            "$": false
+          },
+          "socket": {
+            "xmlns": {
+              "$": "http://clicon.org/restconf",
+              "xml": "http://www.w3.org/XML/1998/namespace"
+            },
+            "namespace": {
+              "xmlns": {
+                "$": "http://clicon.org/restconf",
+                "xml": "http://www.w3.org/XML/1998/namespace"
+              },
+              "$": "default"
+            },
+            "address": {
+              "xmlns": {
+                "$": "http://clicon.org/restconf",
+                "xml": "http://www.w3.org/XML/1998/namespace"
+              },
+              "$": "0.0.0.0"
+            },
+            "port": {
+              "xmlns": {
+                "$": "http://clicon.org/restconf",
+                "xml": "http://www.w3.org/XML/1998/namespace"
+              },
+              "$": 80
+            },
+            "ssl": {
+              "xmlns": {
+                "$": "http://clicon.org/restconf",
+                "xml": "http://www.w3.org/XML/1998/namespace"
+              },
+              "$": false
+            }
+          }
+        }
+      }
+    }
+  }
+}
