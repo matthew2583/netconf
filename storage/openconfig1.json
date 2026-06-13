@@ -1,0 +1,50 @@
+{
+  "devices": {
+    "xmlns": {
+      "$": "http://clicon.org/controller",
+      "xml": "http://www.w3.org/XML/1998/namespace"
+    },
+    "device": {
+      "name": {
+        "$": "openconfig1"
+      },
+      "config": {
+        "restconf": {
+          "xmlns": {
+            "$": "http://clicon.org/restconf",
+            "xml": "http://www.w3.org/XML/1998/namespace"
+          },
+          "enable": {
+            "$": true
+          },
+          "auth-type": {
+            "$": "none"
+          },
+          "debug": {
+            "$": 0
+          },
+          "log-destination": {
+            "$": "file"
+          },
+          "pretty": {
+            "$": false
+          },
+          "socket": {
+            "namespace": {
+              "$": "default"
+            },
+            "address": {
+              "$": "0.0.0.0"
+            },
+            "port": {
+              "$": 80
+            },
+            "ssl": {
+              "$": false
+            }
+          }
+        }
+      }
+    }
+  }
+}
