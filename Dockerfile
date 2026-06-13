@@ -78,7 +78,7 @@ RUN mkdir -p /opt/gateway && \
     wget -q "https://raw.githubusercontent.com/bramstein/xsltjson/master/conf/xml-to-json.xsl" -O /opt/gateway/xml2json.xsl && \
     rm -rf /var/lib/apt/lists/*
 
-COPY gateway.py /usr/local/bin/gateway.py
-RUN chmod +x /usr/local/bin/gateway.py
+COPY gateway/ /usr/local/bin/gateway/
+RUN chmod +x /usr/local/bin/gateway/gateway.py
    
 ENTRYPOINT ["/usr/local/bin/startsystem.sh"]
