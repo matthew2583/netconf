@@ -1,0 +1,20 @@
+<devices xmlns="http://clicon.org/controller">
+   <device>
+      <name>openconfig2</name>
+      <config>
+         <restconf xmlns="http://clicon.org/restconf">
+            <enable>true</enable>
+            <auth-type>none</auth-type>
+            <debug>0</debug>
+            <log-destination>file</log-destination>
+            <pretty>false</pretty>
+            <socket>
+               <namespace>default</namespace>
+               <address>0.0.0.0</address>
+               <port>80</port>
+               <ssl>false</ssl>
+            </socket>
+         </restconf>
+      </config>
+   </device>
+</devices>
